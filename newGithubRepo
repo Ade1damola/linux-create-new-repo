@@ -1,0 +1,142 @@
+#! /bin/bash
+# Script to create a new GitHub repository and initialize a local Git repository
+# This script requires 'git' and 'jq' to be installed on the system.
+
+Helper function to check if a command exists on the system
+command_exists () {
+  command -v "$1" >/dev/null 2>&1
+}
+
+# --- Main Script Logic ---
+
+echo "--- GitHub Repository Creator Script ---"
+echo "This script will guide you through creating a new GitHub repository."
+
+# 1. Check for necessary tools (git and jq)
+echo "Checking for required tools..."
+if ! command_exists git; then
+  echo "Error: Git is not installed. Please install Git to use this script."
+  exit 1
+fi
+
+if ! command_exists jq; then
+  echo "Error: 'jq' is not installed. Please install 'jq' (JSON processor) to use this script."
+  echo "  On Debian/Ubuntu: sudo apt-get install jq"
+  echo "  On macOS: brew install jq"
+  exit 1
+fi
+echo "All required tools (git, jq) found."
+
+# 2. Acquire GitHub Personal Access Token (PAT)
+# Check if GITHUB_PAT is already set as an environment variable
+GITHUB_PAT="${GITHUB_PAT:-}" # Initialize from environment variable or an empty string
+
+if [ -z "$GITHUB_PAT" ]; then
+  echo "" # Newline for readability
+  echo "GitHub Personal Access Token (PAT) not found in GITHUB_PAT environment variable."
+  echo "Please enter your GitHub PAT with 'repo' scope."
+  echo "  (Your input will be hidden for security.)"
+  read -r -s -p "GitHub PAT: " GITHUB_PAT
+  echo "" # Newline after silent read
+
+  if [ -z "$GITHUB_PAT" ]; then
+    echo "Error: GitHub PAT cannot be empty. Exiting."
+    exit 1
+  fi
+fi
+
+# 3. Get the desired repository name from the user
+repoName="$1" # Try to get the name from the first command-line argument
+while [ -z "$repoName" ];
+do
+  echo "----------------------------------------------------"
+  echo "Enter the name for your new GitHub repository:"
+  read -r -p "Repository name: " repoName
+done
+
+echo "Attempting to create repository: '$repoName'..."
+
+# 4. Create the repository on GitHub using the API
+# We capture the full response to extract the clone URL later.
+CREATE_REPO_RESPONSE=$(curl -s -X POST \
+  -H "Authorization: token $GITHUB_PAT" \
+  -H "Accept: application/vnd.github.v3+json" \
+  -d '{"name": "'"$repoName"'", "private": false}' \
+  https://api.github.com/user/repos)
+
+# Check if the curl command itself failed (e.g., network issue)
+if [ $? -ne 0 ]; then
+  echo "Error: Failed to connect to GitHub API. Please check your internet connection."
+  exit 1
+fi
+
+Check for specific error messages from the GitHub API response
+ERROR_MESSAGE=$(echo "$CREATE_REPO_RESPONSE" | jq -r '.message // empty')
+if [ -n "$ERROR_MESSAGE" ] && [ "$ERROR_MESSAGE" != "null" ]; then
+  echo "Error creating repository on GitHub: $ERROR_MESSAGE"
+  if echo "$ERROR_MESSAGE" | grep -q "Bad credentials"; then
+    echo "  Hint: Your GitHub Personal Access Token (PAT) might be invalid or missing the 'repo' scope."
+  elif echo "$ERROR_MESSAGE" | grep -q "name already exists on this account"; then
+    echo "  Hint: A repository with the name '$repoName' already exists on your GitHub account."
+    echo "  Please choose a different name or delete the existing repository manually."
+  fi
+  exit 1
+fi
+
+# 5. Extract the clone URL from the successful API response
+GIT_URL=$(echo "$CREATE_REPO_RESPONSE" | jq -r '.clone_url')
+
+if [ -z "$GIT_URL" ] || [ "$GIT_URL" = "null" ]; then
+  echo "Error: Could not retrieve repository clone URL from GitHub API response."
+  echo "  Received response (for debugging): $CREATE_REPO_RESPONSE"
+  echo "  This might indicate an unexpected API response or a problem with 'jq' parsing."
+  exit 1
+fi
+
+echo "Repository '$repoName' created successfully on GitHub!"
+echo "GitHub Clone URL: $GIT_URL"
+
+# 6. Initialize a local Git repository, add README, and push to GitHub
+echo "----------------------------------------------------"
+echo "Initializing local Git repository and pushing initial content..."
+
+# Create a new directory for the repository and navigate into it
+mkdir -p "$repoName"
+cd "$repoName" || { echo "Error: Could not create or navigate to directory '$repoName'. Exiting."; exit 1; }
+
+# Create a README.md file
+echo "# $repoName" > README.md
+echo "" >> README.md
+echo "This is the initial README for the '$repoName' repository." >> README.md
+
+# Initialize Git in the current directory
+git init
+
+# Add the README.md file to the staging area
+git add .
+
+# Commit the initial changes
+git commit -m "Initial commit: Add README.md"
+
+# Set the default branch name to 'main'
+git branch -M main
+
+# Add the remote GitHub repository as 'origin'
+git remote add origin "$GIT_URL"
+
+# Push the local 'main' branch to the remote 'origin'
+git push -u origin main
+
+if [ $? -ne 0 ]; then
+  echo "Error: Failed to push initial commit to GitHub."
+  echo "  Please check your Git configuration, network connection, or repository permissions."
+  exit 1
+fi
+
+echo "----------------------------------------------------"
+echo "Success! Your new repository '$repoName' is ready."
+echo "  - Local repository created in: $(pwd)"
+echo "  - Initial README.md committed and pushed to GitHub."
+echo "You can now navigate into the '$repoName' directory and start working:"
+echo "  cd $repoName"
+echo "----------------------------------------------------"
