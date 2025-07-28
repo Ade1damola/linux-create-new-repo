@@ -34,7 +34,7 @@ You need a PAT with 'repo' scope (full control of private repositories).
   ```bash
   ./newGithubRepo
   ```
-- Change into the repository directory
+- You can now navigate into the '$repoName' directory and start working
   ```bash
   cd $repoName
   ```
