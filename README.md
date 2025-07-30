@@ -5,14 +5,14 @@ This script creates a new GitHub repository using the GitHub API (via curl) and 
 ## Prerequisites 
 To use this script, ensure you have the following installed and configured:
 1. Git: Command-line version control system.
-- (Check with: `git --version`)
+- Check with: `git --version`
 2. jq: A lightweight and flexible command-line JSON processor.
 This is used to parse responses from the GitHub API.
-- (Install example:
+- Check with: `jq --version`
+- Install example:
     + `sudo apt-get install jq` on Debian/Ubuntu
     +  `brew install jq` on macOS
     +  https://geeksforgeeks.org/git/how-to-install-jq-in-git-bash/ on Git Bash for Windows
-- (Check with: `jq --version`)
 3. GitHub Personal Access Token (PAT):
 You need a PAT with 'repo' scope (full control of private repositories).
 - Generate one here: https://github.com/settings/tokens/new
